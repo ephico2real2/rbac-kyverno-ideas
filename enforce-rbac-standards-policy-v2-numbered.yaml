@@ -1,0 +1,126 @@
+# Validation Policy - Enforce naming standards (NS + Group)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: enforce-rbac-ns-standards-v2-numbered
+  annotations:
+    policies.kyverno.io/title: "Enforce RBAC NS Pattern Standards v2 (Numbered Labels)"
+    policies.kyverno.io/category: "Multi-Tenancy"
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: "Namespace, Group"
+    kyverno.io/kyverno-version: "1.15.1"
+    policies.kyverno.io/minversion: "1.15.0"
+    kyverno.io/kubernetes-version: "1.24-1.29"
+    policies.kyverno.io/description: >-
+      Enforces standardized RBAC group name patterns for v2-numbered labels.
+      Validates group names from numbered labels like oim-ns-admin-1, oim-ns-edit-1, etc.
+      for namespaces and OpenShift Group objects. Uses a 3-state precondition to control inclusion.
+  labels:
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: rbac-validation
+    app.kubernetes.io/part-of: ldap-integration
+    app.kubernetes.io/version: v2-numbered
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+
+  # Validate namespace label group values against allowed pattern
+  - name: validate-namespace-groups
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+    preconditions:
+      any:
+      # Include if explicitly requested (overrides everything)
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/include-rbac\" || '' }}"
+        operator: Equals
+        value: "true"
+      # Default processing - include if not explicitly excluded
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/exclude-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    context:
+      - name: all_groups
+        variable:
+          jmesPath: >
+            [
+              request.object.metadata.labels."oim-ns-admin-1" || '',
+              request.object.metadata.labels."oim-ns-admin-2" || '',
+              request.object.metadata.labels."oim-ns-admin-3" || '',
+              request.object.metadata.labels."oim-ns-edit-1" || '',
+              request.object.metadata.labels."oim-ns-edit-2" || '',
+              request.object.metadata.labels."oim-ns-edit-3" || '',
+              request.object.metadata.labels."oim-ns-view-1" || '',
+              request.object.metadata.labels."oim-ns-view-2" || '',
+              request.object.metadata.labels."oim-ns-view-3" || ''
+            ] | [?@ != '' && @ != null]
+    validate:
+      message: "RBAC Standards Violation: All group names must follow app-ocp-rbac-{team}-ns-(admin|developer|audit) pattern."
+      foreach:
+        - list: "all_groups"
+          deny:
+            conditions:
+              all:
+              - key: "{{ element }}"
+                operator: NotEqual
+                value: ""
+              - key: "{{ regex_match('^app-ocp-rbac-[a-zA-Z0-9-]+-(ns|cluster)-(admin|developer|audit)$', element) }}"
+                operator: Equals
+                value: false
+
+  # Validate OpenShift Group objects against allowed pattern
+  - name: validate-openshift-groups
+    match:
+      any:
+      - resources:
+          kinds: ["user.openshift.io/v1/Group"]
+          names: ["app-ocp-rbac-*"]
+    # Preconditions removed - using names filter in match instead
+    validate:
+      message: "RBAC Standards Violation: Group '{{ request.object.metadata.name }}' must follow app-ocp-rbac-{team}-(ns|cluster)-(admin|developer|audit)."
+      deny:
+        conditions:
+          all:
+          - key: "{{ request.object.metadata.name }}"
+            operator: NotEqual
+            value: ""
+          - key: "{{ regex_match('^app-ocp-rbac-[a-zA-Z0-9-]+-(ns|cluster)-(admin|developer|audit)$', request.object.metadata.name) }}"
+            operator: Equals
+            value: false
+
+  # Recommend RBAC labels are present on namespaces
+  - name: require-rbac-labels
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+    preconditions:
+      any:
+      # Include if explicitly requested (overrides everything)
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/include-rbac\" || '' }}"
+        operator: Equals
+        value: "true"
+      # Default processing - include if not explicitly excluded
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/exclude-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    context:
+      - name: admin_label_count
+        variable:
+          jmesPath: "request.object.metadata.labels | keys(@) | [?starts_with(@, 'oim-ns-admin-')] | length(@)"
+      - name: edit_label_count
+        variable:
+          jmesPath: "request.object.metadata.labels | keys(@) | [?starts_with(@, 'oim-ns-edit-')] | length(@)"
+      - name: view_label_count
+        variable:
+          jmesPath: "request.object.metadata.labels | keys(@) | [?starts_with(@, 'oim-ns-view-')] | length(@)"
+    validate:
+      message: "RBAC Policy Recommendation: add at least one numbered label (oim-ns-admin-N|oim-ns-edit-N|oim-ns-view-N) to enable team access."
+      deny:
+        conditions:
+          all:
+          - key: "{{ add(add(admin_label_count, edit_label_count), view_label_count) }}"
+            operator: Equals
+            value: 0

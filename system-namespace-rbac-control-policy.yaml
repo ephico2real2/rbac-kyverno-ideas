@@ -1,0 +1,118 @@
+# System Namespace RBAC Control Policy
+# Purpose: Automatically label system namespaces for RBAC inclusion/exclusion control
+# Relationship: Must be deployed BEFORE the generate-namespace-rolebindings policy
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: system-namespace-rbac-control
+  annotations:
+    policies.kyverno.io/title: "System Namespace RBAC Control"
+    policies.kyverno.io/category: "Multi-Tenancy"
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: "Namespace"
+    kyverno.io/kyverno-version: "1.15.1"
+    policies.kyverno.io/minversion: "1.15.0"
+    kyverno.io/kubernetes-version: "1.24-1.29"
+    policies.kyverno.io/description: >-
+      Automatically applies include/exclude RBAC labels to system namespaces.
+      Controls which namespaces should be processed by the RBAC generation policy.
+  labels:
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: rbac-control
+    app.kubernetes.io/part-of: ldap-integration
+    app.kubernetes.io/version: v2-numbered
+spec:
+  generateExisting: true
+  background: true
+  rules:
+
+  # Auto-include specific approved system namespaces (FIRST - takes precedence)
+  - name: auto-include-approved-system-namespaces
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+          names: ["openshift-config", "openshift-monitoring", "kube-system"]
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          labels:
+            +(kyverno.io/include-rbac): "true"
+
+  # Auto-exclude Kubernetes system namespaces (unless explicitly included)
+  - name: auto-exclude-kube-system-namespaces
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+          names: ["kube-*"]
+    preconditions:
+      all:
+      # Only apply exclude if not explicitly included
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/include-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          labels:
+            +(kyverno.io/exclude-rbac): "true"
+
+  # Auto-exclude OpenShift system namespaces (unless explicitly included)
+  - name: auto-exclude-openshift-system-namespaces
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+          names: ["openshift-*"]
+    preconditions:
+      all:
+      # Only apply exclude if not explicitly included
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/include-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          labels:
+            +(kyverno.io/exclude-rbac): "true"
+
+  # Auto-exclude other common system namespaces (unless explicitly included)
+  - name: auto-exclude-common-system-namespaces
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+          names: ["default", "istio-system", "cert-manager", "kyverno", "vault", "consul"]
+    preconditions:
+      all:
+      # Only apply exclude if not explicitly included
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/include-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          labels:
+            +(kyverno.io/exclude-rbac): "true"
+
+  # Precedence rule: actively remove exclude-rbac when include-rbac=true is present
+  - name: include-rbac-precedence-cleanup
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+    preconditions:
+      all:
+      # Only trigger when include-rbac is explicitly true
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/include-rbac\" || '' }}"
+        operator: Equals
+        value: "true"
+      # And exclude-rbac exists (either true or false)
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/exclude-rbac\" || '' }}"
+        operator: AnyIn
+        value: ["true", "false"]
+    mutate:
+      patchesJson6902: |-
+        - op: remove
+          path: "/metadata/labels/kyverno.io~1exclude-rbac"

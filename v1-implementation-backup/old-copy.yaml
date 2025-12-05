@@ -1,0 +1,216 @@
+# Generate Policy - Namespace RoleBindings (short names, correct foreach)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-namespace-rolebindings
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: "Generate Namespace RoleBindings v2 (Numbered Labels)"
+    policies.kyverno.io/category: "Multi-Tenancy"
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: "RoleBinding"
+    kyverno.io/kyverno-version: "1.15.1"
+    policies.kyverno.io/minversion: "1.15.0"
+    kyverno.io/kubernetes-version: "1.24-1.29"
+    policies.kyverno.io/description: >-
+      Generates per-group RoleBindings in each namespace using numbered labels:
+      oim-ns-admin-1, oim-ns-admin-2, oim-ns-edit-1, oim-ns-edit-2, oim-ns-view-1, etc.
+      This approach solves Kubernetes label validation issues with comma-separated values.
+  labels:
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: rbac-generation
+    app.kubernetes.io/part-of: ldap-integration
+    app.kubernetes.io/version: v2-numbered
+spec:
+  generateExisting: true
+  background: true
+  rules:
+
+  # ns-admin → ClusterRole admin
+  - name: generate-ns-admin-rolebindings
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+    preconditions:
+      all:
+      # Skip system namespaces unless explicitly opted in
+      - key: "{{ request.object.metadata.name }}"
+        operator: AnyNotIn
+        value: ["kube-system", "kube-public", "kube-node-lease", "default"]
+      # Only process if numbered admin labels are present
+      - key: "{{ request.object.metadata.labels.\"oim-ns-admin-1\" || request.object.metadata.labels.\"oim-ns-admin-2\" || request.object.metadata.labels.\"oim-ns-admin-3\" || request.object.metadata.labels.\"oim-ns-admin-4\" || request.object.metadata.labels.\"oim-ns-admin-5\" || '' }}"
+        operator: NotEquals
+        value: ""
+      # Don't process if explicitly excluded
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/exclude-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    context:
+      - name: admin_groups
+        variable:
+          jmesPath: >
+            [
+              request.object.metadata.labels."oim-ns-admin-1" || '',
+              request.object.metadata.labels."oim-ns-admin-2" || '',
+              request.object.metadata.labels."oim-ns-admin-3" || '',
+              request.object.metadata.labels."oim-ns-admin-4" || '',
+              request.object.metadata.labels."oim-ns-admin-5" || ''
+            ] | [?@ != '' && @ != null]
+      - name: namespace_name
+        variable:
+          jmesPath: request.object.metadata.name
+    generate:
+      synchronize: true
+      foreach:
+      - list: "admin_groups"
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        name: "{{ element }}-admin-rb"
+        namespace: "{{ request.object.metadata.name }}"
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/version: v2-numbered
+              rbac.ocp.io/role-type: ns-admin
+              rbac.ocp.io/group-name: "{{ element }}"
+            annotations:
+              kyverno.io/policy: generate-namespace-rolebindings
+              kyverno.io/rule: generate-ns-admin-rolebindings
+              kyverno.io/source-label: oim-ns-admin-*
+              kyverno.io/policy-version: v2-numbered
+          subjects:
+          - kind: Group
+            name: "{{ element }}"
+            apiGroup: rbac.authorization.k8s.io
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: admin
+
+  # ns-developer → ClusterRole edit
+  - name: generate-ns-developer-rolebindings
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+    preconditions:
+      all:
+      # Skip system namespaces unless explicitly opted in
+      - key: "{{ request.object.metadata.name }}"
+        operator: AnyNotIn
+        value: ["kube-system", "kube-public", "kube-node-lease", "default"]
+      # Only process if numbered edit labels are present
+      - key: "{{ request.object.metadata.labels.\"oim-ns-edit-1\" || request.object.metadata.labels.\"oim-ns-edit-2\" || request.object.metadata.labels.\"oim-ns-edit-3\" || request.object.metadata.labels.\"oim-ns-edit-4\" || request.object.metadata.labels.\"oim-ns-edit-5\" || '' }}"
+        operator: NotEquals
+        value: ""
+      # Don't process if explicitly excluded
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/exclude-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    context:
+      - name: edit_groups
+        variable:
+          jmesPath: >
+            [
+              request.object.metadata.labels."oim-ns-edit-1" || '',
+              request.object.metadata.labels."oim-ns-edit-2" || '',
+              request.object.metadata.labels."oim-ns-edit-3" || '',
+              request.object.metadata.labels."oim-ns-edit-4" || '',
+              request.object.metadata.labels."oim-ns-edit-5" || ''
+            ] | [?@ != '' && @ != null]
+      - name: namespace_name
+        variable:
+          jmesPath: request.object.metadata.name
+    generate:
+      synchronize: true
+      foreach:
+      - list: "edit_groups"
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        name: "{{ element }}-edit-rb"
+        namespace: "{{ request.object.metadata.name }}"
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/version: v2-numbered
+              rbac.ocp.io/role-type: ns-developer
+              rbac.ocp.io/group-name: "{{ element }}"
+            annotations:
+              kyverno.io/policy: generate-namespace-rolebindings
+              kyverno.io/rule: generate-ns-developer-rolebindings
+              kyverno.io/source-label: oim-ns-edit-*
+              kyverno.io/policy-version: v2-numbered
+          subjects:
+          - kind: Group
+            name: "{{ element }}"
+            apiGroup: rbac.authorization.k8s.io
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: edit
+
+  # ns-audit → ClusterRole view
+  - name: generate-ns-audit-rolebindings
+    match:
+      any:
+      - resources:
+          kinds: ["Namespace"]
+    preconditions:
+      all:
+      # Skip system namespaces unless explicitly opted in
+      - key: "{{ request.object.metadata.name }}"
+        operator: AnyNotIn
+        value: ["kube-system", "kube-public", "kube-node-lease", "default"]
+      # Only process if numbered view labels are present
+      - key: "{{ request.object.metadata.labels.\"oim-ns-view-1\" || request.object.metadata.labels.\"oim-ns-view-2\" || request.object.metadata.labels.\"oim-ns-view-3\" || request.object.metadata.labels.\"oim-ns-view-4\" || request.object.metadata.labels.\"oim-ns-view-5\" || '' }}"
+        operator: NotEquals
+        value: ""
+      # Don't process if explicitly excluded
+      - key: "{{ request.object.metadata.labels.\"kyverno.io/exclude-rbac\" || '' }}"
+        operator: NotEquals
+        value: "true"
+    context:
+      - name: view_groups
+        variable:
+          jmesPath: >
+            [
+              request.object.metadata.labels."oim-ns-view-1" || '',
+              request.object.metadata.labels."oim-ns-view-2" || '',
+              request.object.metadata.labels."oim-ns-view-3" || '',
+              request.object.metadata.labels."oim-ns-view-4" || '',
+              request.object.metadata.labels."oim-ns-view-5" || ''
+            ] | [?@ != '' && @ != null]
+      - name: namespace_name
+        variable:
+          jmesPath: request.object.metadata.name
+    generate:
+      synchronize: true
+      foreach:
+      - list: "view_groups"
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        name: "{{ element }}-view-rb"
+        namespace: "{{ request.object.metadata.name }}"
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/version: v2-numbered
+              rbac.ocp.io/role-type: ns-audit
+              rbac.ocp.io/group-name: "{{ element }}"
+            annotations:
+              kyverno.io/policy: generate-namespace-rolebindings
+              kyverno.io/rule: generate-ns-audit-rolebindings
+              kyverno.io/source-label: oim-ns-view-*
+              kyverno.io/policy-version: v2-numbered
+          subjects:
+          - kind: Group
+            name: "{{ element }}"
+            apiGroup: rbac.authorization.k8s.io
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: view

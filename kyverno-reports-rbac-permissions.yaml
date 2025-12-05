@@ -1,0 +1,54 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:reports-controller:openshift-groups
+  labels:
+    # Aggregation label to add permissions to reports controller
+    rbac.kyverno.io/aggregate-to-reports-controller: "true"
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: reports-controller-rbac
+    app.kubernetes.io/part-of: kyverno
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    kyverno.io/rbac-purpose: "Grant reports controller access to OpenShift Groups for policy reporting"
+    kyverno.io/rbac-scope: "cluster-wide"
+    kyverno.io/created-for: "reports-controller validation and reporting"
+rules:
+# OpenShift Groups - needed for policy validation reports
+- apiGroups: ["user.openshift.io"]
+  resources: ["groups"]
+  verbs: ["get", "list", "watch"]
+
+# OpenShift Users - for comprehensive RBAC reporting
+- apiGroups: ["user.openshift.io"] 
+  resources: ["users"]
+  verbs: ["get", "list", "watch"]
+
+# Core RBAC resources - for complete access analysis
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "watch"]
+
+---
+# Optional: Security Context Constraints (if needed for reports)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:reports-controller:openshift-scc
+  labels:
+    # Aggregation label to add permissions to reports controller
+    rbac.kyverno.io/aggregate-to-reports-controller: "true"
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: reports-controller-rbac
+    app.kubernetes.io/part-of: kyverno
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    kyverno.io/rbac-purpose: "Grant reports controller access to OpenShift Security Context Constraints for comprehensive reporting"
+    kyverno.io/rbac-scope: "cluster-wide"
+    kyverno.io/created-for: "reports-controller security analysis"
+rules:
+# OpenShift Security Context Constraints - for security policy reporting
+- apiGroups: ["security.openshift.io"]
+  resources: ["securitycontextconstraints"]
+  verbs: ["get", "list", "watch"]

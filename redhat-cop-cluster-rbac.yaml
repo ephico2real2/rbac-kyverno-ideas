@@ -1,0 +1,92 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: GroupConfig
+metadata:
+  name: universal-cluster-rbac
+  labels:
+    app.kubernetes.io/name: namespace-configuration-operator
+    app.kubernetes.io/component: cluster-rbac-automation
+  annotations:
+    description: "Automatic ClusterRoleBinding creation for app-ocp-rbac-*-cluster-* groups"
+spec:
+  labelSelector: {}  # Match ALL groups, then filter in templates
+  templates:
+    # ClusterRoleBinding for cluster-admin groups
+    - objectTemplate: |
+        {{- if and (contains "app-ocp-rbac-" .Name) (hasSuffix "-cluster-admin" .Name) }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: v2-cluster-rbac
+            rbac.ocp.io/role-type: cluster-admin
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/team: "{{ regexReplaceAll \"app-ocp-rbac-(.+)-cluster-admin\" .Name \"${1}\" }}"
+          annotations:
+            rbac.ocp.io/auto-generated: "true"
+            rbac.ocp.io/source-pattern: "group-name-based"
+            rbac.ocp.io/group-pattern: "app-ocp-rbac-*-cluster-admin"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin
+        {{- end }}
+
+    # ClusterRoleBinding for cluster-developer groups
+    - objectTemplate: |
+        {{- if and (contains "app-ocp-rbac-" .Name) (hasSuffix "-cluster-developer" .Name) }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: v2-cluster-rbac
+            rbac.ocp.io/role-type: cluster-developer
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/team: "{{ regexReplaceAll \"app-ocp-rbac-(.+)-cluster-developer\" .Name \"${1}\" }}"
+          annotations:
+            rbac.ocp.io/auto-generated: "true"
+            rbac.ocp.io/source-pattern: "group-name-based"
+            rbac.ocp.io/group-pattern: "app-ocp-rbac-*-cluster-developer"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: edit
+        {{- end }}
+
+    # ClusterRoleBinding for cluster-audit groups
+    - objectTemplate: |
+        {{- if and (contains "app-ocp-rbac-" .Name) (hasSuffix "-cluster-audit" .Name) }}
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: "{{ .Name }}-crb"
+          labels:
+            app.kubernetes.io/managed-by: namespace-configuration-operator
+            app.kubernetes.io/version: v2-cluster-rbac
+            rbac.ocp.io/role-type: cluster-audit
+            rbac.ocp.io/group-name: "{{ .Name }}"
+            rbac.ocp.io/team: "{{ regexReplaceAll \"app-ocp-rbac-(.+)-cluster-audit\" .Name \"${1}\" }}"
+          annotations:
+            rbac.ocp.io/auto-generated: "true"
+            rbac.ocp.io/source-pattern: "group-name-based"
+            rbac.ocp.io/group-pattern: "app-ocp-rbac-*-cluster-audit"
+        subjects:
+        - kind: Group
+          name: "{{ .Name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view
+        {{- end }}

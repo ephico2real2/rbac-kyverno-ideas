@@ -1,0 +1,23 @@
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: app-ocp-rbac-demo-cluster-admin
+users: []
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: app-ocp-rbac-demo-cluster-developer
+users: []
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: app-ocp-rbac-demo-cluster-audit
+users: []
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: app-ocp-rbac-alpha-cluster-admin
+users: []

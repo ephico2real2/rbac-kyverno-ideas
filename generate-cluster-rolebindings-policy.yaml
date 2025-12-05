@@ -1,0 +1,127 @@
+# Generate Policy - ClusterRoleBindings (3 rules, short names)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-cluster-rolebindings
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: "Generate Cluster RoleBindings"
+    policies.kyverno.io/category: "Multi-Tenancy"
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: "ClusterRoleBinding"
+    kyverno.io/kyverno-version: "1.15.1"
+    policies.kyverno.io/minversion: "1.15.0"
+    kyverno.io/kubernetes-version: "1.24-1.29"
+    policies.kyverno.io/description: >-
+      Generates ClusterRoleBindings for app-ocp-rbac-*-cluster-* groups with
+      short, role-aligned names: -admin-crb, -edit-crb, -view-crb.
+  labels:
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: rbac-generation
+    app.kubernetes.io/part-of: ldap-integration
+spec:
+  generateExisting: true
+  background: true
+  rules:
+
+  # cluster-admin → admin
+  - name: generate-crb-admin
+    match:
+      any:
+      - resources:
+          kinds: ["user.openshift.io/v1/Group"]
+          names: ["app-ocp-rbac-*-cluster-admin"]
+    context:
+    - name: teamname
+      variable:
+        jmesPath: split(request.object.metadata.name, '-')[2]
+    generate:
+      synchronize: true
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      name: "{{ request.object.metadata.name }}-admin-crb"
+      data:
+        metadata:
+          labels:
+            app.kubernetes.io/managed-by: kyverno
+            rbac.ocp.io/role-type: cluster-role
+            rbac.ocp.io/group-name: "{{ request.object.metadata.name }}"
+          annotations:
+            kyverno.io/policy: generate-cluster-rolebindings
+            kyverno.io/rule: generate-crb-admin
+        subjects:
+        - kind: Group
+          name: "{{ request.object.metadata.name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: admin
+
+  # cluster-developer → edit
+  - name: generate-crb-developer
+    match:
+      any:
+      - resources:
+          kinds: ["user.openshift.io/v1/Group"]
+          names: ["app-ocp-rbac-*-cluster-developer"]
+    context:
+    - name: teamname
+      variable:
+        jmesPath: split(request.object.metadata.name, '-')[2]
+    generate:
+      synchronize: true
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      name: "{{ request.object.metadata.name }}-edit-crb"
+      data:
+        metadata:
+          labels:
+            app.kubernetes.io/managed-by: kyverno
+            rbac.ocp.io/role-type: cluster-role
+            rbac.ocp.io/group-name: "{{ request.object.metadata.name }}"
+          annotations:
+            kyverno.io/policy: generate-cluster-rolebindings
+            kyverno.io/rule: generate-crb-developer
+        subjects:
+        - kind: Group
+          name: "{{ request.object.metadata.name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: edit
+
+  # cluster-audit → view
+  - name: generate-crb-audit
+    match:
+      any:
+      - resources:
+          kinds: ["user.openshift.io/v1/Group"]
+          names: ["app-ocp-rbac-*-cluster-audit"]
+    context:
+    - name: teamname
+      variable:
+        jmesPath: split(request.object.metadata.name, '-')[2]
+    generate:
+      synchronize: true
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      name: "{{ request.object.metadata.name }}-view-crb"
+      data:
+        metadata:
+          labels:
+            app.kubernetes.io/managed-by: kyverno
+            rbac.ocp.io/role-type: cluster-role
+            rbac.ocp.io/group-name: "{{ request.object.metadata.name }}"
+          annotations:
+            kyverno.io/policy: generate-cluster-rolebindings
+            kyverno.io/rule: generate-crb-audit
+        subjects:
+        - kind: Group
+          name: "{{ request.object.metadata.name }}"
+          apiGroup: rbac.authorization.k8s.io
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: view

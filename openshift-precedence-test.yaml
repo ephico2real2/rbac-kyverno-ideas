@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-precedence-test
+  labels:
+    kyverno.io/include-rbac: "true"
+    oim-ns-admin-1: "openshift-yaml-admin"
+    oim-ns-admin-2: "openshift-yaml-security"
+    oim-ns-edit-1: "openshift-yaml-developer"
+    oim-ns-view-1: "openshift-yaml-auditor"
+    oim-ns-view-2: "openshift-yaml-monitoring"
+  annotations:
+    test-type: "precedence-prevention-test"
+    description: "Testing if include-rbac=true prevents exclude-rbac from being added"
